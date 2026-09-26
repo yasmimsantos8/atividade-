@@ -1,0 +1,246 @@
+PROJETO BANCO DE DADOS - SISTEMA HOSPITALAR 
+Autor: Yasmim Vitória 
+Data de entrega: 25/09/2026
+
+
+1. CRIAÇÃO DO BANCO DE DADOS
+
+CREATE DATABASE hospital_db; --Criação do Banco de Dados hospital_db
+
+USE hospital_db; 
+
+CREATE TABLE paciente (
+    id_paciente INT PRIMARY KEY AUTO_INCREMENT,
+    nome_paciente VARCHAR(100) NOT NULL,
+    data_nascimento_paciente DATE,
+    telefone_paciente VARCHAR(20),
+    tipo_sanguineo_paciente VARCHAR(3),
+    cpf_paciente VARCHAR(14) UNIQUE,
+
+    CONSTRAINT chk_tipo_sanguineo
+    CHECK (tipo_sanguineo_paciente IN
+    ('A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'))
+);
+
+CREATE TABLE medico (
+    id_medico INT PRIMARY KEY AUTO_INCREMENT,
+    nome_medico VARCHAR(100) NOT NULL,
+    data_nascimento_medico DATE,
+    telefone_medico VARCHAR(20),
+    especialidade_medico VARCHAR(80) NOT NULL,
+    email_medico VARCHAR(100) UNIQUE
+);
+
+CREATE TABLE consulta (
+    id_consulta INT PRIMARY KEY AUTO_INCREMENT,
+    id_paciente INT NOT NULL,
+    id_medico INT NOT NULL,
+    data_consulta DATE NOT NULL,
+    horario_consulta TIME NOT NULL,
+    motivo_consulta VARCHAR(200),
+
+    CONSTRAINT fk_consulta_paciente FOREIGN KEY (id_paciente) REFERENCES paciente(id_paciente),
+    CONSTRAINT fk_consulta_medico FOREIGN KEY (id_medico) REFERENCES medico(id_medico)
+);
+
+CREATE TABLE quarto (
+    id_quarto INT PRIMARY KEY AUTO_INCREMENT,
+    numero_quarto INT,
+    tipo_quarto VARCHAR(30),
+    status_quarto VARCHAR(20),
+    data_entrada_quarto DATE,
+    data_saida_quarto DATE,
+
+    CONSTRAINT chk_status_quarto
+    CHECK (status_quarto IN ('Disponível', 'Ocupado', 'Manutenção'))
+);
+
+CREATE TABLE atestado (
+    id_atestado INT PRIMARY KEY AUTO_INCREMENT,
+    id_paciente INT NOT NULL,
+    data_emissao_atestado DATE,
+    dias_afastamento_atestado INT,
+    motivo_atestado VARCHAR(255),
+
+    CONSTRAINT fk_atestado_paciente FOREIGN KEY (id_paciente) REFERENCES paciente(id_paciente),
+
+    CONSTRAINT chk_dias_afastamento 
+    CHECK (dias_afastamento_atestado > 0)
+);
+
+CREATE TABLE cirurgia (
+     id_cirurgia INT PRIMARY KEY AUTO_INCREMENT,
+     id_paciente INT NOT NULL,
+     id_medico INT NOT NULL,
+     tipo_cirurgia VARCHAR(100),
+     data_cirurgia DATE,
+     horario_cirurgia TIME,
+
+   CONSTRAINT fk_cirurgia_paciente FOREIGN KEY (id_paciente) REFERENCES paciente(id_paciente),
+   CONSTRAINT fk_cirurgia_medico FOREIGN KEY (id_medico) REFERENCES medico(id_medico)
+);
+
+
+// REGISTROS 
+
+
+INSERT INTO paciente
+(nome_paciente, data_nascimento_paciente, telefone_paciente, tipo_sanguineo_paciente, cpf_paciente)
+VALUES
+('Ana Souza', '2008-05-10', '(18)99999-1111', 'A+', '123.456.789-01');
+
+INSERT INTO medico 
+(nome_medico, data_nascimento_medico, telefone_medico, especialidade_medico, email_medico)
+VALUES 
+('Maria Luiza', '1990-08-20', '(18)99999-1111', 'Cardiologia', 'marialuiza@gmail.com');
+
+INSERT INTO consulta
+(id_paciente, id_medico, data_consulta, horario_consulta, motivo_consulta)
+VALUES
+(1, 1, '2026-09-20', '08:00:00', 'Dor no peito');
+
+INSERT INTO quarto
+(numero_quarto, tipo_quarto, status_quarto, data_entrada_quarto, data_saida_quarto)
+VALUES
+(101, 'Individual', 'Disponível', '2026-09-10', '2026-09-15');
+
+INSERT INTO atestado
+(id_paciente, data_emissao_atestado, dias_afastamento_atestado, motivo_atestado)
+VALUES
+(1, '2026-09-20', 3, 'Infecção viral');
+
+INSERT INTO cirurgia
+(id_paciente, id_medico, tipo_cirurgia, data_cirurgia, horario_cirurgia)
+VALUES
+(1, 1, 'Cirurgia cardíaca', '2026-10-05', '08:00:00');
+
+
+// VIEW DE RELATORIO  
+-- Mostra informanoes das consultas, paciente e medico.
+
+
+CREATE VIEW vw_relatorio_consultas AS SELECT
+c.id_consulta,
+p.nome_paciente,
+m.nome_medico,
+m.especialidade_medico,
+c.data_consulta,
+c.horario_consulta,
+c.motivo_consulta 
+
+FROM consulta c
+INNER JOIN paciente p 
+ON c.id_paciente = p.id_paciente 
+INNER JOIN medico m 
+ON c.id_medico = m.id_medico; 
+
+
+-- Teste da VIEW 
+SELECT *
+ * FROM vw_relatorio_consultas;
+
+
+ // INDICES
+
+ -- Índice 1: 
+ -- Facilita pesquisas de pacientes pelo nome.
+
+  CREATE INDEX idx_paciente_nome 
+  ON paciente(nome_paciente);
+
+  
+  -- Índice 2: 
+  -- Facilita pesquisas de consultas pela data.
+  
+  CREATE INDEX idx_consulta_data
+   ON consulta(data_consulta);
+
+
+   // TRIGGER   
+   --Impede o cadastro de uma cirurgia com data anterior
+   -- à data atual.
+
+
+   DELIMITER // 
+
+   CREATE TRIGGER trg_validar_data_cirurgia
+    BEFORE INSERT ON cirurgia 
+    FOR EACH ROW 
+    BEGIN
+    
+    IF NEW.data_cirurgia < CURDATE() THEN
+    
+    SIGNAL SQLSTATE '45000'
+    SET MESSAGE_TEXT =
+    'A data da cirurgia não pode ser anterior à data atual.';
+
+     END IF; 
+     
+     END //
+     
+     DELIMITER ;
+
+
+     // RELATÓRIO ANALÍTICO COM AGRUPAMENTO 
+     -- Quantidade de consultas realizadas por especialidade.
+
+
+     SELECT
+    m.especialidade_medico,
+    COUNT(c.id_consulta) AS quantidade_consultas 
+    FROM medico m
+     LEFT JOIN consulta c
+      ON m.id_medico = c.id_medico
+       GROUP BY m.especialidade_medico
+        ORDER BY quantidade_consultas DESC;
+
+
+        //RELATORIO DE PACIENTE E MEDICO
+        
+        
+SELECT
+ m.nome_medico, 
+ COUNT(c.id_consulta) AS quantidade_consultas
+  FROM medico m
+   LEFT JOIN consulta c
+    ON m.id_medico = c.id_medico
+     GROUP BY m.id_medico, m.nome_medico
+      ORDER BY quantidade_consultas DESC;
+
+
+
+      // USUARIO COM PERMISSAO LIMITADA 
+      --O usuario padera apenas consultar o VIEW.
+      --Nao podera inserir, alterar ou excluir dados.
+
+
+      CREATE USER 'usuario_hospital'@'localhost'
+       IDENTIFIED BY '123456'; 
+       
+       GRANT SELECT
+        ON hospital_db.vw_relatorio_consultas
+         TO 'usuario_hospital'@'localhost';
+
+
+         // CONSULTAS FINAIS PARA TESTES 
+
+
+         SELECT * FROM paciente;
+
+         SELECT * FROM medico;
+
+         SELECT * FROM consulta;
+
+         SELECT * FROM quarto;
+         
+         SELECT * FROM atestado;
+         
+         SELECT * FROM cirurgia;
+         
+         SELECT * FROM vw_relatorio_consultas;
+         
+
+
+
+         // FIM
+
